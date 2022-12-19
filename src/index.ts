@@ -14,6 +14,6 @@ tree.insert(new Point(8, 9, 10));
 tree.insert(new Point(9, 10, 11));
 tree.insert(new Point(10, 11, 12));
 
-// Find the nearest points to the point (5, 6, 7) within a distance of 2 units
+// Find the 7 nearest points to the point (5, 6, 7).
 const nearestPoints = tree.nearest(new Point(5, 6, 7), 10);
 console.log(nearestPoints);
