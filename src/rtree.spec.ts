@@ -20,6 +20,28 @@ describe("RTree", () => {
         ]);
     });
 
+    it('should expand bounds on insertion', () => {
+        const points = [
+            new Point(1, 2, 3),
+            new Point(4, 5, 6),
+            new Point(7, 8, 9),
+        ];
+
+        tree.insert(points[0]);
+        tree.insert(points[1]);
+        tree.insert(points[2]);
+
+        expect(tree.root!.points).eql(points);
+        expect(tree.root!.bounds).eql({
+            minX: 1,
+            minY: 2,
+            minZ: 3,
+            maxX: 7,
+            maxY: 8,
+            maxZ: 9,
+        });
+    });
+
     it("should find the nearest points to a given point", () => {
         tree.insert(new Point(1, 2, 3));
         tree.insert(new Point(4, 5, 6));
@@ -60,7 +82,7 @@ describe("RTree", () => {
     });
 
     it("should split the tree when the number of points exceeds the maximum capacity", () => {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             tree.insert(new Point(i, i, i));
         }
 
@@ -68,8 +90,8 @@ describe("RTree", () => {
         expect(tree.root!.left).to.not.be.null;
         expect(tree.root!.right).to.not.be.null;
         expect(tree.root!.points).to.be.empty;
-        expect(tree.root!.left!.points).to.have.any;
-        expect(tree.root!.left!.points).to.have.any;
+        expect(tree.root!.left!.points).to.have.length(2);
+        expect(tree.root!.left!.points).to.have.length(2);
     });
 
     it("should balance itself", () => {
