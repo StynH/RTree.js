@@ -78,16 +78,27 @@ class RTreeNode {
             this.right.traverse(operation);
         }
     }
+
+    public getCentroid(): Point {
+        const x = (this.bounds.minX + this.bounds.maxX) / 2;
+        const y = (this.bounds.minY + this.bounds.maxY) / 2;
+        const z = (this.bounds.minZ + this.bounds.maxZ) / 2;
+        return new Point(x, y, z);
+    }
+
+    public isLeaf(): boolean {
+        return this.left === null && this.right === null;
+    }
 }
 
 export class RTree {
-    private root: RTreeNode | null;
+    root: RTreeNode | null;
 
     constructor() {
         this.root = null;
     }
 
-    private expandBounds(node: RTreeNode, point: Point): void{
+    private insertAndExpandBounds(node: RTreeNode, point: Point): void{
         node.points.push(point);
         const bounds = node.bounds;
         bounds.minX = Math.min(bounds.minX, point.x);
@@ -106,16 +117,25 @@ export class RTree {
 
         let node = this.root;
         while (true) {
-            if (node.points.length < 4) {
-                this.expandBounds(node, point);
+            if (node.isLeaf() && node.points.length < 4) {
+                this.insertAndExpandBounds(node, point);
                 break;
+            } else if(!node.isLeaf()) {
+                node =
+                    point.distance(node.left!.getCentroid()) <
+                    point.distance(node.right!.getCentroid())
+                        ? node.left!
+                        : node.right!;
+                continue;
             }
 
             let minEnlargement = Number.POSITIVE_INFINITY;
             let chosenChild: RTreeNode | null = null;
             let newPoints: Point[] | null = null;
             for (const child of [node.left, node.right]) {
-                if (child === null) continue;
+                if (child === null){
+                    continue;
+                }
 
                 const enlargedBounds = {
                     minX: Math.min(child.bounds.minX, point.x),
@@ -142,7 +162,7 @@ export class RTree {
             }
 
             if (chosenChild === null) {
-                this.expandBounds(node, point);
+                this.insertAndExpandBounds(node, point);
                 break;
             }
 
@@ -261,7 +281,7 @@ export class RTree {
             const rightPoints = node.points.slice(splitIndex);
             node.left = new RTreeNode(leftPoints);
             node.right = new RTreeNode(rightPoints);
-            node = node.left;
+            node.points = [];
         }
 
         if (splitNode !== null) {
