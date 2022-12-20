@@ -68,19 +68,7 @@ export class RTreeNode {
             this.bounds.maxZ = Math.max(this.bounds.maxZ, point.z);
         }
     }
-
-    public traverse(operation: (node: RTreeNode) => void): void {
-        if (this.left !== null) {
-            this.left.traverse(operation);
-        }
-
-        operation(this);
-
-        if (this.right !== null) {
-            this.right.traverse(operation);
-        }
-    }
-
+    
     public getCentroid(): Point {
         const x = (this.bounds.minX + this.bounds.maxX) / 2;
         const y = (this.bounds.minY + this.bounds.maxY) / 2;
