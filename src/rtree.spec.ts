@@ -49,11 +49,13 @@ describe("RTree", () => {
         tree.insert(new Point(-1, -2, -3));
         tree.insert(new Point(-4, -5, -6));
         tree.insert(new Point(-7, -8, -9));
+        tree.insert(new Point(-9, -9, -9));
+        tree.insert(new Point(-5, -5, -5));
 
         const nearestPoints = tree.nearest(new Point(-5, -6, -7), 2);
         expect(nearestPoints).to.eql([
             new Point(-4, -5, -6),
-            new Point(-7, -8, -9),
+            new Point(-5, -5, -5),
         ]);
     });
 
@@ -68,5 +70,36 @@ describe("RTree", () => {
         expect(tree.root!.points).to.be.empty;
         expect(tree.root!.left!.points).to.have.any;
         expect(tree.root!.left!.points).to.have.any;
+    });
+
+    it("should balance itself", () => {
+        const tree = new RTree();
+
+        // Insert some points into the tree
+        tree.insert(new Point(1, 2, 3));
+        tree.insert(new Point(2, 3, 4));
+        tree.insert(new Point(3, 4, 5));
+        tree.insert(new Point(4, 5, 6));
+
+        // Calculate the height of the tree
+        let height = 1;
+        const stack: any = [{ node: tree.root, height: 1 }];
+        while (stack.length > 0) {
+            const item = stack.pop();
+            const node = item.node;
+            const h = item.height;
+
+            if (node === null) {
+                continue;
+            }
+
+            height = Math.max(height, h);
+            if (!node.isLeaf()) {
+                stack.push({ node: node.left, height: h + 1 });
+                stack.push({ node: node.right, height: h + 1 });
+            }
+        }
+
+        expect(height).to.be.within(2, 3);
     });
 });

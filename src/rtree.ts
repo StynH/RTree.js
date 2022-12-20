@@ -35,6 +35,7 @@ class RTreeNode {
     public points: Point[];
     public left: RTreeNode | null;
     public right: RTreeNode | null;
+    public parent: RTreeNode | null;
     public bounds: {
         minX: number;
         minY: number;
@@ -48,6 +49,7 @@ class RTreeNode {
         this.points = points;
         this.left = null;
         this.right = null;
+        this.parent = null;
         this.bounds = {
             minX: Number.POSITIVE_INFINITY,
             minY: Number.POSITIVE_INFINITY,
@@ -92,7 +94,9 @@ class RTreeNode {
 }
 
 export class RTree {
-    root: RTreeNode | null;
+    private readonly MAX_POINTS_PER_NODE: number = 4;
+
+    public root: RTreeNode | null;
 
     constructor() {
         this.root = null;
@@ -109,6 +113,20 @@ export class RTree {
         bounds.maxZ = Math.max(bounds.maxZ, point.z);
     }
 
+    private splitNode(node: RTreeNode): [RTreeNode, RTreeNode] {
+        const centroid = node.getCentroid();
+        const sortedPoints = node.points.sort((a, b) => a.distance(centroid) - b.distance(centroid));
+
+        const splitIndex = Math.floor(sortedPoints.length / 2);
+        const leftPoints = sortedPoints.slice(0, splitIndex);
+        const rightPoints = sortedPoints.slice(splitIndex);
+
+        const leftNode = new RTreeNode(leftPoints);
+        const rightNode = new RTreeNode(rightPoints);
+
+        return [leftNode, rightNode];
+    }
+
     public insert(point: Point): void {
         if (this.root === null) {
             this.root = new RTreeNode([point]);
@@ -117,213 +135,60 @@ export class RTree {
 
         let node = this.root;
         while (true) {
-            if (node.isLeaf() && node.points.length < 4) {
+            if (node.isLeaf()) {
                 this.insertAndExpandBounds(node, point);
-                break;
-            } else if(!node.isLeaf()) {
-                node =
-                    point.distance(node.left!.getCentroid()) <
-                    point.distance(node.right!.getCentroid())
-                        ? node.left!
-                        : node.right!;
-                continue;
-            }
-
-            let minEnlargement = Number.POSITIVE_INFINITY;
-            let chosenChild: RTreeNode | null = null;
-            let newPoints: Point[] | null = null;
-            for (const child of [node.left, node.right]) {
-                if (child === null){
-                    continue;
+                if (node.points.length < this.MAX_POINTS_PER_NODE) {
+                    return;
                 }
 
-                const enlargedBounds = {
-                    minX: Math.min(child.bounds.minX, point.x),
-                    minY: Math.min(child.bounds.minY, point.y),
-                    minZ: Math.min(child.bounds.minZ, point.z),
-                    maxX: Math.max(child.bounds.maxX, point.x),
-                    maxY: Math.max(child.bounds.maxY, point.y),
-                    maxZ: Math.max(child.bounds.maxZ, point.z),
-                };
+                const splitResult = this.splitNode(node);
+                const leftNode = splitResult[0];
+                const rightNode = splitResult[1];
+                leftNode.parent = node;
+                rightNode.parent = node;
+                node.left = leftNode;
+                node.right = rightNode;
+                node.points = [];
 
-                const volumeEnlargement =
-                    (enlargedBounds.maxX - enlargedBounds.minX) *
-                    (enlargedBounds.maxY - enlargedBounds.minY) *
-                    (enlargedBounds.maxZ - enlargedBounds.minZ) -
-                    (child.bounds.maxX - child.bounds.minX) *
-                    (child.bounds.maxY - child.bounds.minY) *
-                    (child.bounds.maxZ - child.bounds.minZ);
+                const bounds = node.bounds;
+                bounds.minX = Math.min(leftNode.bounds.minX, rightNode.bounds.minX);
+                bounds.minY = Math.min(leftNode.bounds.minY, rightNode.bounds.minY);
+                bounds.minZ = Math.min(leftNode.bounds.minZ, rightNode.bounds.minZ);
+                bounds.maxX = Math.max(leftNode.bounds.maxX, rightNode.bounds.maxX);
+                bounds.maxY = Math.max(leftNode.bounds.maxY, rightNode.bounds.maxY);
+                bounds.maxZ = Math.max(leftNode.bounds.maxZ, rightNode.bounds.maxZ);
 
-                if (volumeEnlargement < minEnlargement) {
-                    minEnlargement = volumeEnlargement;
-                    chosenChild = child;
-                    newPoints = child.points.concat([point]);
+                node = node.parent!;
+                if (node === null) {
+                    return;
                 }
-            }
-
-            if (chosenChild === null) {
-                this.insertAndExpandBounds(node, point);
-                break;
-            }
-
-            node = chosenChild;
-            if (newPoints !== null) {
-                node.points = newPoints;
-                node.bounds = {
-                    minX: Number.POSITIVE_INFINITY,
-                    minY: Number.POSITIVE_INFINITY,
-                    minZ: Number.POSITIVE_INFINITY,
-                    maxX: Number.NEGATIVE_INFINITY,
-                    maxY: Number.NEGATIVE_INFINITY,
-                    maxZ: Number.NEGATIVE_INFINITY,
-                };
-
-                for (const point of node.points) {
-                    node.bounds.minX = Math.min(node.bounds.minX, point.x);
-                    node.bounds.minY = Math.min(node.bounds.minY, point.y);
-                    node.bounds.minZ = Math.min(node.bounds.minZ, point.z);
-                    node.bounds.maxX = Math.max(node.bounds.maxX, point.x);
-                    node.bounds.maxY = Math.max(node.bounds.maxY, point.y);
-                    node.bounds.maxZ = Math.max(node.bounds.maxZ, point.z);
-                }
-            }
-        }
-
-        let splitNode: RTreeNode | null = null;
-        let splitAxis: number | null = null;
-        let splitIndex: number | null = null;
-        while (true) {
-            if (node === null || node.points.length <= 4){
-                break;
-            }
-
-            splitNode = node;
-            splitAxis = null;
-            splitIndex = null;
-            let minLongestSide = Number.POSITIVE_INFINITY;
-            for (let axis = 0; axis < 3; axis++) {
-                const sortedPoints = [...node.points].sort((a, b) => a.compare(b, axis));
-                let minWaste = Number.POSITIVE_INFINITY;
-                for (let i = 1; i < sortedPoints.length; i++) {
-                    const leftPoints = sortedPoints.slice(0, i);
-                    const rightPoints = sortedPoints.slice(i);
-                    const leftBounds = {
-                        minX: Number.POSITIVE_INFINITY,
-                        minY: Number.POSITIVE_INFINITY,
-                        minZ: Number.POSITIVE_INFINITY,
-                        maxX: Number.NEGATIVE_INFINITY,
-                        maxY: Number.NEGATIVE_INFINITY,
-                        maxZ: Number.NEGATIVE_INFINITY,
-                    };
-
-                    for (const point of leftPoints) {
-                        leftBounds.minX = Math.min(leftBounds.minX, point.x);
-                        leftBounds.minY = Math.min(leftBounds.minY, point.y);
-                        leftBounds.minZ = Math.min(leftBounds.minZ, point.z);
-                        leftBounds.maxX = Math.max(leftBounds.maxX, point.x);
-                        leftBounds.maxY = Math.max(leftBounds.maxY, point.y);
-                        leftBounds.maxZ = Math.max(leftBounds.maxZ, point.z);
-                    }
-
-                    const rightBounds = {
-                        minX: Number.POSITIVE_INFINITY,
-                        minY: Number.POSITIVE_INFINITY,
-                        minZ: Number.POSITIVE_INFINITY,
-                        maxX: Number.NEGATIVE_INFINITY,
-                        maxY: Number.NEGATIVE_INFINITY,
-                        maxZ: Number.NEGATIVE_INFINITY,
-                    };
-
-                    for (const point of rightPoints) {
-                        rightBounds.minX = Math.min(rightBounds.minX, point.x);
-                        rightBounds.minY = Math.min(rightBounds.minY, point.y);
-                        rightBounds.minZ = Math.min(rightBounds.minZ, point.z);
-                        rightBounds.maxX = Math.max(rightBounds.maxX, point.x);
-                        rightBounds.maxY = Math.max(rightBounds.maxY, point.y);
-                        rightBounds.maxZ = Math.max(rightBounds.maxZ, point.z);
-                    }
-
-                    const leftWaste =
-                        (leftBounds.maxX - leftBounds.minX) *
-                        (leftBounds.maxY - leftBounds.minY) *
-                        (leftBounds.maxZ - leftBounds.minZ) -
-                        leftPoints.length * 0.75;
-
-                    const rightWaste =
-                        (rightBounds.maxX - rightBounds.minX) *
-                        (rightBounds.maxY - rightBounds.minY) *
-                        (rightBounds.maxZ - rightBounds.minZ) -
-                        rightPoints.length * 0.75;
-
-                    if (leftWaste + rightWaste < minWaste) {
-                        minWaste = leftWaste + rightWaste;
-                        splitAxis = axis;
-                        splitIndex = i;
-                    }
-                }
-
-                if (
-                    sortedPoints[sortedPoints.length - 1].distance(sortedPoints[0]) < minLongestSide
-                ) {
-                    minLongestSide = sortedPoints[sortedPoints.length - 1].distance(sortedPoints[0]);
-                    splitAxis = axis;
-                    splitIndex = sortedPoints.length / 2;
-                }
-            }
-
-            if (splitAxis === null || splitIndex === null) {
-                splitNode = null;
-                break;
-            }
-
-            node.points.sort((a, b) => a.compare(b, splitAxis));
-            const leftPoints = node.points.slice(0, splitIndex);
-            const rightPoints = node.points.slice(splitIndex);
-            node.left = new RTreeNode(leftPoints);
-            node.right = new RTreeNode(rightPoints);
-            node.points = [];
-        }
-
-        if (splitNode !== null) {
-            const parent = new RTreeNode(splitNode.points);
-            parent.left = splitNode.left;
-            parent.right = splitNode.right;
-            if (splitNode === this.root) {
-                this.root = parent;
-            }
-            else {
-                let curr: RTreeNode | null = this.root;
-                while (curr !== null) {
-                    if (curr.left === splitNode || curr.right === splitNode) {
-                        if (curr.left === splitNode) {
-                            curr.left = parent;
-                        }
-                        else {
-                            curr.right = parent;
-                        }
-                        break;
-                    }
-
-                    if (curr.left !== null && curr.right !== null) {
-                        curr = curr.left.points.length <= curr.right.points.length ? curr.left : curr.right;
-                    }
-                    else if (curr.left !== null) {
-                        curr = curr.left;
-                    }
-                    else if (curr.right !== null) {
-                        curr = curr.right;
-                    }
-                    else {
-                        curr = null;
-                    }
+            } else {
+                // Choose the child node that is the best fit for the point
+                const leftDistance = node.left!.getCentroid().distance(point);
+                const rightDistance = node.right!.getCentroid().distance(point);
+                if (leftDistance < rightDistance) {
+                    node = node.left!;
+                } else {
+                    node = node.right!;
                 }
             }
         }
     }
 
     public traverse(operation: (node: RTreeNode) => void): void {
-        if (this.root !== null) {
-            this.root.traverse(operation);
+        if (this.root === null) {
+            return;
+        }
+
+        const stack: RTreeNode[] = [this.root];
+        while (stack.length > 0) {
+            const node = stack.pop();
+            if (node === null) {
+                continue;
+            }
+
+            operation(node!);
+            stack.push(node!.left!, node!.right!);
         }
     }
 
