@@ -31,7 +31,7 @@ export class Point {
     }
 }
 
-class RTreeNode {
+export class RTreeNode {
     public points: Point[];
     public left: RTreeNode | null;
     public right: RTreeNode | null;
